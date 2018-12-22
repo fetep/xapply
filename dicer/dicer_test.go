@@ -20,6 +20,11 @@ func TestDicer(T *testing.T) {
 			output:   "hello world",
 		},
 		DicerTest{
+			template: "hello %[1]",
+			inputs:   []string{"world"},
+			output:   "hello world",
+		},
+		DicerTest{
 			template: "%1 %2",
 			inputs:   []string{"hello", "world"},
 			output:   "hello world",
@@ -28,6 +33,11 @@ func TestDicer(T *testing.T) {
 		// Multi-character index
 		DicerTest{
 			template: "%10",
+			inputs:   []string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "10"},
+			output:   "10",
+		},
+		DicerTest{
+			template: "%[10]",
 			inputs:   []string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "10"},
 			output:   "10",
 		},
@@ -42,6 +52,19 @@ func TestDicer(T *testing.T) {
 			template: "hello %2",
 			inputs:   []string{"a"},
 			err:      "template references out of bounds input index 2",
+		},
+
+		// Missing ]
+		DicerTest{
+			template: "hello %[1 world",
+			inputs:   []string{},
+			err:      "no closing ] found",
+		},
+
+		DicerTest{
+			template: "hello %[",
+			inputs:   []string{},
+			err:      "no closing ] found",
 		},
 
 		// %% escape

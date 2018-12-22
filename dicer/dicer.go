@@ -36,13 +36,15 @@ func (t *Template) Expand(inputs []string) (string, error) {
 				out += "%"
 				continue
 			case peek == '[':
-				inputIndex, inputLength, err := t.readNumber(pos + 1)
+				dicerExpr, err := t.readUntil(']', pos+2)
 				if err != nil {
 					return "", err
 				}
 
-				pos += inputLength
-				out += inputs[inputIndex-1]
+				pos += len(dicerExpr) + 2
+				// TODO for now, we just allow dicerExpr to be the actual index number with no dicing.
+				index, _ := strconv.ParseInt(dicerExpr, 10, 64)
+				out += inputs[index-1]
 				continue
 			case t.isNumber(pos + 1):
 				inputIndex, inputLength, err := t.readNumber(pos + 1)
@@ -92,6 +94,17 @@ func (t *Template) readNumber(start int) (int, int, error) {
 	}
 
 	return int(i), len(number), nil
+}
+
+// Given a slice of runes, read runes until one matches end and return a string up to but not including end
+func (t *Template) readUntil(end rune, start int) (string, error) {
+	for i := start; i < len(t.runes); i++ {
+		if t.runes[i] == end {
+			return string(t.runes[start:i]), nil
+		}
+	}
+
+	return "", fmt.Errorf("no closing %s found", string(end))
 }
 
 func (t *Template) isNumber(i int) bool {
