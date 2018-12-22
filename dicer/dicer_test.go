@@ -56,15 +56,15 @@ func TestDicer(T *testing.T) {
 
 		// Missing ]
 		DicerTest{
-			template: "hello %[1 world",
-			inputs:   []string{},
-			err:      "no closing ] found",
+			template: "xhello %[1 world",
+			inputs:   []string{"hello"},
+			err:      "dicer expression: character 10: missing closing ]",
 		},
 
 		DicerTest{
 			template: "hello %[",
 			inputs:   []string{},
-			err:      "no closing ] found",
+			err:      "dicer expression: character 9: missing closing ]",
 		},
 
 		// %% escape
