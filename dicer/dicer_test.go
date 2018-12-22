@@ -87,6 +87,27 @@ func TestDicer(T *testing.T) {
 			inputs:   []string{},
 			output:   "test%q",
 		},
+
+		// simple dice
+		DicerTest{
+			template: "%[1/2]",
+			inputs:   []string{"1/2/3"},
+			output:   "2",
+		},
+
+		// multi-level dice
+		DicerTest{
+			template: "%[1/2,1]",
+			inputs:   []string{"1,a/2,b/3,c"},
+			output:   "2",
+		},
+
+		// dice position out of bounds
+		DicerTest{
+			template: "%[1/4]",
+			inputs:   []string{"1/2/3"},
+			output:   "",
+		},
 	}
 
 	for _, test := range tests {
