@@ -20,6 +20,11 @@ func TestDicer(T *testing.T) {
 			output:   "hello world",
 		},
 		DicerTest{
+			template: "%1 world",
+			inputs:   []string{"hello"},
+			output:   "hello world",
+		},
+		DicerTest{
 			template: "hello %[1]",
 			inputs:   []string{"world"},
 			output:   "hello world",
@@ -88,18 +93,107 @@ func TestDicer(T *testing.T) {
 			output:   "test%q",
 		},
 
-		// simple dice
+		// dice selection
 		DicerTest{
 			template: "%[1/2]",
 			inputs:   []string{"1/2/3"},
 			output:   "2",
 		},
 
-		// multi-level dice
+		// multi-level dice selections
 		DicerTest{
 			template: "%[1/2,1]",
 			inputs:   []string{"1,a/2,b/3,c"},
 			output:   "2",
+		},
+
+		// dice removal
+		DicerTest{
+			template: "%[1.-2]",
+			inputs:   []string{"aa.bb.cc.dd"},
+			output:   "aa.cc.dd",
+		},
+		DicerTest{
+			template: "%[1.-2.-$]",
+			inputs:   []string{"aa.bb.cc.dd"},
+			output:   "aa.cc",
+		},
+		DicerTest{
+			template: "%[1.-2.-$.-1]",
+			inputs:   []string{"aa.bb.cc.dd"},
+			output:   "cc",
+		},
+		DicerTest{
+			template: "%[1.-2]z",
+			inputs:   []string{"a..c"},
+			output:   "a.cz",
+		},
+		DicerTest{
+			template: "%[1.-4]",
+			inputs:   []string{"test.example.com."},
+			output:   "test.example.com",
+		},
+		DicerTest{
+			template: "%[1.-$]",
+			inputs:   []string{"test.example.com."},
+			output:   "test.example.com",
+		},
+
+		// TODO: support '@' joining
+		/*
+			DicerTest{
+				template: "%[1/@.2]",
+				inputs:   []string{"1.2.3.4/A.B.C.D/I.II.III.IV"},
+				output:   "2/B/II",
+			},
+			DicerTest{
+				template: "%[1/@.-2]",
+				inputs:   []string{"1.2.3.4/A.B.C.D/I.II.III.IV"},
+				output:   "1.3.4/A.C.D/I.III.IV",
+			},
+			DicerTest{
+				template: "%[1/@.-$].four",
+				inputs:   []string{"1.2.3.4/A.B.C/I.II"},
+				output:   "1.2.3/A.B/I",
+			},
+			DicerTest{
+				template: "%[ @.2]",
+				inputs:   []string{"1.2.3.4   A.B.C.D  I.II.III.IV"},
+				output:   "2 B II",
+			},
+			DicerTest{
+				template: "%[ @]",
+				inputs:   []string{"1.2.3.4   A.B.C.D  I.II.III.IV"},
+				output:   "1.2.3.4 A.B.C.D I.II.III.IV",
+			},
+		*/
+
+		// dice removal of an index that doesn't exist
+		DicerTest{
+			template: "%[1.-5]",
+			inputs:   []string{"aa.bb.cc.dd"},
+			output:   "aa.bb.cc.dd",
+		},
+
+		// dice selection and removal
+		DicerTest{
+			template: "%[1/2.-2]",
+			inputs:   []string{"aa.bb.cc/dd.ee.ff"},
+			output:   "dd.ff",
+		},
+
+		// $ dice position
+		DicerTest{
+			template: "%[1.$]",
+			inputs:   []string{"aa.bb.cc.dd"},
+			output:   "dd",
+		},
+
+		// $ dice position removal
+		DicerTest{
+			template: "%[1.-$]",
+			inputs:   []string{"aa.bb.cc.dd"},
+			output:   "aa.bb.cc",
 		},
 
 		// dice position out of bounds

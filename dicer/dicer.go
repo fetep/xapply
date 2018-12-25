@@ -101,10 +101,9 @@ func (t *Template) dicer(start int, inputs []string) (string, int, error) {
 	pos += inputLength
 	out := inputs[inputIndex-1]
 
-	// Now we have the dicer expression in `expr`. We have two states: reading a dice character, and
-	// reading a dice position. Alternate between both until we hit the end.
+	// Now we have the start of the dicer expression as `pos`. We have two states: reading a dice character, and
+	// reading a dice operation/position. Alternate between both until we hit the end.
 	dicerChar := ""
-	dicerPos := 0
 	for ; pos < len(t.runes); pos++ {
 		char := t.runes[pos]
 
@@ -113,23 +112,42 @@ func (t *Template) dicer(start int, inputs []string) (string, int, error) {
 		} else if dicerChar == "" {
 			dicerChar = string(char)
 		} else {
-			// TODO: readNumber isn't right, we need readDicerPos. It can be a number, a negative
-			// number, or a $.
-			var dicerPosLength int
-			dicerPos, dicerPosLength, err = t.readNumber(pos)
+			dicerPosType, dicerPos, dicerPosLength, err := t.readDicerPos(pos)
 			if err != nil {
 				return "", 0, fmt.Errorf("error trying to read dicerLength: %s", err.Error())
 			}
+
 			outParts := strings.Split(out, dicerChar)
 
-			// If they ask for a position we don't have, the output becomes empty and we can
-			// short-cicuit.
-			if dicerPos > len(outParts) {
-				out = ""
-				break
+			// Translate the special token dicerLast to the dicer position of the last part
+			if dicerPos == dicerLast {
+				dicerPos = len(outParts)
 			}
 
-			out = outParts[dicerPos-1]
+			// 1-based dicer position to 0-based array index
+			dicerPosIndex := dicerPos - 1
+
+			switch dicerPosType {
+			case dicerSelect:
+				// If they ask for a position we don't have in select mode, the output becomes empty and we can
+				// short-cicuit.
+				if dicerPos > len(outParts) {
+					out = ""
+					break
+				}
+
+				out = outParts[dicerPos-1]
+			case dicerRemove:
+				// If they ask for a position we don't have in remove mode, simply do nothing. Only
+				// handle the case where we have an element to remove.
+				if dicerPos <= len(outParts) {
+					outParts = append(outParts[:dicerPosIndex], outParts[dicerPosIndex+1:]...)
+				}
+
+				out = strings.Join(outParts, dicerChar)
+			default:
+				panic(fmt.Errorf("unknown dicerPosType: %d", dicerPosType))
+			}
 
 			// The for loop will advance by 1 (pos++), advance any extra chars here if the position
 			// is more than one character (e.g. '%[1/10]')
@@ -143,8 +161,50 @@ func (t *Template) dicer(start int, inputs []string) (string, int, error) {
 	return out, dicerExprLength, nil
 }
 
+// Dicer position constants
+const (
+	dicerLast   = -1
+	dicerRemove = 1
+	dicerSelect = 2
+)
+
+// Given a slice of runes, read runes as long as we get valid looking dicer position. A dicer
+// position can be:
+//    int   type dicerSelect; A positive integer, representing the position of the diced object to select
+//    -int  type dicerRemove; A negative integer, representing the position of the diced object to remove
+//    $     type dicerSelectLast; The character '$', representing the last position of the diced
+//
+// It returns a position type (dicerRemove or dicerSelect), and a position number, the number of
+// runes the position took up, and any position parsing error encountered. The position number is
+// either a positive integer or the special const dicerLast which represents the last value.
+func (t *Template) readDicerPos(start int) (int, int, int, error) {
+	pos := start
+	positionType := dicerSelect
+	if t.runes[pos] == '-' {
+		positionType = dicerRemove
+		pos++
+	}
+
+	switch {
+	case t.isNumber(pos):
+		dicerPos, dicerPosLength, err := t.readNumber(pos)
+
+		// what if dicerPos is 0
+
+		if err != nil {
+			return 0, 0, 0, err
+		}
+
+		return positionType, dicerPos, (pos - start) + dicerPosLength, nil
+	case t.runes[pos] == '$':
+		return positionType, dicerLast, (pos - start) + 1, nil
+	}
+
+	return 0, 0, 0, fmt.Errorf("unknown dicer position character %q", string(t.runes[pos]))
+}
+
 // Given a slice of runes with the first element is a [0-9], read runes as long as we get [0-9]s and
-// return an int representation of these numbers along with the number of runes we consumed.
+// return an int representation of these numbers along with the length runes that make up the number.
 func (t *Template) readNumber(start int) (int, int, error) {
 	var number string
 
