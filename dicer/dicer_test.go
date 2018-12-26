@@ -63,13 +63,13 @@ func TestDicer(T *testing.T) {
 		DicerTest{
 			template: "xhello %[1 world",
 			inputs:   []string{"hello"},
-			err:      "dicer expression: character 10: missing closing ]",
+			err:      "char 8: dicer expression missing closing ]",
 		},
 
 		DicerTest{
 			template: "hello %[",
 			inputs:   []string{},
-			err:      "dicer expression: character 9: missing closing ]",
+			err:      "char 7: dicer expression missing closing ]",
 		},
 
 		// %% escape
@@ -205,8 +205,7 @@ func TestDicer(T *testing.T) {
 	}
 
 	for _, test := range tests {
-		d := NewTemplate(test.template)
-		output, err := d.Expand(test.inputs)
+		output, err := Expand(test.template, test.inputs)
 
 		if err != nil && test.err == "" {
 			T.Errorf("template %v with %v: got unexpected error %q", test.template, test.inputs, err.Error())

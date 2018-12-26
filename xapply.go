@@ -9,8 +9,8 @@ import (
 	"github.com/fetep/xapply/dicer"
 )
 
-func apply(dicerTmpl dicer.Template, input string) {
-	output, err := dicerTmpl.Expand([]string{input})
+func apply(tmpl string, input string) {
+	output, err := dicer.Expand(tmpl, []string{input})
 	if err != nil {
 		panic(err)
 	}
@@ -22,16 +22,15 @@ func main() {
 		log.Fatalf("need a command")
 	}
 
-	cmd, args := os.Args[1], os.Args[2:]
-	dicerTmpl := dicer.NewTemplate(cmd)
+	cmdTmpl, args := os.Args[1], os.Args[2:]
 	for _, input := range args {
 		if input == "-" {
 			scanner := bufio.NewScanner(os.Stdin)
 			for scanner.Scan() {
-				apply(dicerTmpl, scanner.Text())
+				apply(cmdTmpl, scanner.Text())
 			}
 		} else {
-			apply(dicerTmpl, input)
+			apply(cmdTmpl, input)
 		}
 	}
 }

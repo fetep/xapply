@@ -6,54 +6,68 @@ import (
 	"strings"
 )
 
-// Template represents a dicer template.
-type Template struct {
-	runes []rune
-}
-
-// NewTemplate creates a new dicer template from a string.
-func NewTemplate(tmpl string) Template {
-	return Template{
-		runes: []rune(tmpl),
-	}
-}
-
-// Expand the dicer template given a set of strings mapping to %1, %2, etc.
-func (t *Template) Expand(inputs []string) (string, error) {
+// Expand a dicer template given a set of strings mapping to %1, %2, etc.
+// %n is a shortcut for %[n].
+// %[expressions] are expanded by the Dicer.
+func Expand(template string, inputs []string) (string, error) {
+	runes := []rune(template)
 	var out string
 
-	for pos := 0; pos < len(t.runes); pos++ {
-		char := t.runes[pos]
-		//log.Printf("pos=%v char=%v", pos, char)
+	for pos := 0; pos < len(runes); pos++ {
+		char := runes[pos]
 
 		// A '%' dicer escape followed by at least one character means we need to expand it.
-		if char == '%' && pos < len(t.runes)-1 {
-			peek := t.runes[pos+1]
+		if char == '%' && pos < len(runes)-1 {
+			peek := runes[pos+1]
 			switch {
 			case peek == '%':
 				pos++
 				out += "%"
 				continue
 			case peek == '[':
-				dicerOut, dicerExprLength, err := t.dicer(pos+2, inputs)
+				// Scan ahead to make sure the dicer expression has a closing ']'. We could catch this later
+				// parsing char-by-char, but it's a better user experience to see an easy error about a missing
+				// ']' instead of seeing that there's an invalid dicer expression (trying to parse chars that
+				// were meant to be after the ']').
+				end := 0
+				for i := pos; i < len(runes); i++ {
+					if runes[i] == ']' {
+						end = i
+						break
+					}
+				}
+				if end == 0 {
+					return "", fmt.Errorf("char %d: dicer expression missing closing ]", pos+1)
+				}
+
+				dicerExpr := runes[pos+2 : end]
+				input, inputLength, err := ReadNumber(dicerExpr)
+				if err != nil {
+					return "", err
+				}
+				if input > len(inputs) {
+					return "", fmt.Errorf("template references out of bounds input index %d", input)
+				}
+
+				dicerOut, err := Dicer(inputs[input-1], dicerExpr[inputLength:])
 				if err != nil {
 					return "", err
 				}
 
-				pos += dicerExprLength + 2 // extra 2 for the []s
+				pos += len(dicerExpr) + 2 // extra 2 for the []s
 				out += dicerOut
 				continue
-			case t.isNumber(pos + 1):
-				inputIndex, inputLength, err := t.readNumber(pos + 1)
+			case IsDigit(runes[pos+1]):
+				input, inputLength, err := ReadNumber(runes[pos+1:])
 				if err != nil {
 					return "", err
 				}
-				if inputIndex > len(inputs) {
-					return "", fmt.Errorf("template references out of bounds input index %d", inputIndex)
+				if input > len(inputs) {
+					return "", fmt.Errorf("template references out of bounds input index %d", input)
 				}
 
 				pos += inputLength
-				out += inputs[inputIndex-1]
+				out += inputs[input-1]
 				continue
 			}
 		}
@@ -64,57 +78,32 @@ func (t *Template) Expand(inputs []string) (string, error) {
 	return out, nil
 }
 
-func (t *Template) String() string {
-	return string(t.runes)
-}
-
-// Given the starting position of dicer expression (the expr part of %[expr]) and a set of inputs,
-// expand the expression's input and dice it up according to the spec.  It returns the diced result,
-// the full length of the dicer template (not including the []s or %), and any dice error
-// encountered.
-func (t *Template) dicer(start int, inputs []string) (string, int, error) {
-	// Scan ahead to make sure the dicer expression has a closing ']'. We could catch this later
-	// parsing char-by-char, but it's a better user experience to see an easy error about a missing
-	// ']' instead of seeing that there's an invalid dicer expression (trying to parse chars that
-	// were meant to be after the ']').
-	dicerExprLength := 0
-	for i := start; i < len(t.runes); i++ {
-		if t.runes[i] == ']' {
-			dicerExprLength = i - start
-			break
-		}
-	}
-	if dicerExprLength == 0 {
-		return "", 0, fmt.Errorf("dicer expression: character %d: missing closing ]", start+1)
-	}
-
-	// Pull the input position off first
-	pos := start
-	inputIndex, inputLength, err := t.readNumber(start)
-	if err != nil {
-		return "", 0, fmt.Errorf("template references invalid input index: %s", err.Error())
-	}
-	if inputIndex > len(inputs) {
-		return "", 0, fmt.Errorf("template references out of bounds input index %d", inputIndex)
-	}
-
-	pos += inputLength
-	out := inputs[inputIndex-1]
+// Dicer applies a dicer expression to a given input string. A dicer expression is everything that
+// comes after the '%[n' input selector. For example, the template '%[1.3.-$]' has a dicer
+// expression '.3.-$]'. The dicer expression is a set of two repeating tokens: the dice character
+// and the position selector. The input string is split by the dicer character, with positions
+// indexed starting at 1. The selector is, by default, replace (replace the whole string with the
+// selected position). To change the selector to remove (remove the selected position), prefix it
+// with a '-'. Position is simply an index number (1-based), and also accepts the special character
+// '$' to signify the last index. It returns the diced result and any errors encountered.
+func Dicer(base string, expr []rune) (string, error) {
+	out := base
 
 	// Now we have the start of the dicer expression as `pos`. We have two states: reading a dice character, and
 	// reading a dice operation/position. Alternate between both until we hit the end.
 	dicerChar := ""
-	for ; pos < len(t.runes); pos++ {
-		char := t.runes[pos]
+	for pos := 0; pos < len(expr); pos++ {
+		char := expr[pos]
 
 		if char == ']' {
 			break
 		} else if dicerChar == "" {
 			dicerChar = string(char)
 		} else {
-			dicerPosType, dicerPos, dicerPosLength, err := t.readDicerPos(pos)
+			dicerPosType, dicerPos, dicerPosLength, err := ReadDicerPos(expr[pos:])
+			//fmt.Printf("dicerPosType=%v dicerPos=%v dicerPosLength=%v\n", dicerPosType, dicerPos, dicerPosLength)
 			if err != nil {
-				return "", 0, fmt.Errorf("error trying to read dicerLength: %s", err.Error())
+				return "", fmt.Errorf("error trying to read dicerLength: %s", err.Error())
 			}
 
 			outParts := strings.Split(out, dicerChar)
@@ -151,6 +140,7 @@ func (t *Template) dicer(start int, inputs []string) (string, int, error) {
 
 			// The for loop will advance by 1 (pos++), advance any extra chars here if the position
 			// is more than one character (e.g. '%[1/10]')
+			//fmt.Printf("started reading at pos=%d (%s), moving forward %d\n", pos, string(expr[pos]), dicerPosLength-1)
 			pos += dicerPosLength - 1
 
 			// Reset state machine
@@ -158,7 +148,7 @@ func (t *Template) dicer(start int, inputs []string) (string, int, error) {
 		}
 	}
 
-	return out, dicerExprLength, nil
+	return out, nil
 }
 
 // Dicer position constants
@@ -168,26 +158,24 @@ const (
 	dicerSelect = 2
 )
 
-// Given a slice of runes, read runes as long as we get valid looking dicer position. A dicer
-// position can be:
+// ReadDicerPos reads the next full dicer position in a slice of runes.  A dicer position can be:
 //    int   type dicerSelect; A positive integer, representing the position of the diced object to select
 //    -int  type dicerRemove; A negative integer, representing the position of the diced object to remove
-//    $     type dicerSelectLast; The character '$', representing the last position of the diced
+//    $     type dicerSelect; The character '$', representing the last position of the diced
 //
 // It returns a position type (dicerRemove or dicerSelect), and a position number, the number of
 // runes the position took up, and any position parsing error encountered. The position number is
-// either a positive integer or the special const dicerLast which represents the last value.
-func (t *Template) readDicerPos(start int) (int, int, int, error) {
-	pos := start
+// either a positive integer or the special const dicerLast (-1) which represents the last value.
+func ReadDicerPos(runes []rune) (int, int, int, error) {
+	pos := 0
 	positionType := dicerSelect
-	if t.runes[pos] == '-' {
+	if runes[pos] == '-' {
 		positionType = dicerRemove
 		pos++
 	}
 
-	switch {
-	case t.isNumber(pos):
-		dicerPos, dicerPosLength, err := t.readNumber(pos)
+	if IsDigit(runes[pos]) {
+		dicerPos, dicerPosLength, err := ReadNumber(runes[pos:])
 
 		// what if dicerPos is 0
 
@@ -195,29 +183,26 @@ func (t *Template) readDicerPos(start int) (int, int, int, error) {
 			return 0, 0, 0, err
 		}
 
-		return positionType, dicerPos, (pos - start) + dicerPosLength, nil
-	case t.runes[pos] == '$':
-		return positionType, dicerLast, (pos - start) + 1, nil
+		return positionType, dicerPos, pos + dicerPosLength, nil
+	} else if runes[pos] == '$' {
+		return positionType, dicerLast, pos + 1, nil
 	}
 
-	return 0, 0, 0, fmt.Errorf("unknown dicer position character %q", string(t.runes[pos]))
+	return 0, 0, 0, fmt.Errorf("unknown dicer position character %q", string(runes[pos]))
 }
 
-// Given a slice of runes with the first element is a [0-9], read runes as long as we get [0-9]s and
-// return an int representation of these numbers along with the length runes that make up the number.
-func (t *Template) readNumber(start int) (int, int, error) {
+// ReadNumber reads the next full number in a slice of runes. A number is specifically a collection
+// of [0-9] characters. It returns an int representation of the number read along with the length
+// runes that make up the number.
+func ReadNumber(runes []rune) (int, int, error) {
 	var number string
 
-	if start > len(t.runes)-1 {
-		return 0, 0, fmt.Errorf("readNumber called with start=%d which is longer than runes (%d)", start, len(t.runes)-1)
-	}
-
-	for i := start; i < len(t.runes) && t.isNumber(i); i++ {
-		number += string(t.runes[i])
+	for i := 0; i < len(runes) && IsDigit(runes[i]); i++ {
+		number += string(runes[i])
 	}
 
 	if len(number) == 0 { // the rune at start isn't a number!
-		return 0, 0, fmt.Errorf("readNumber called with start=%d, which is not an integer: %v", start, string(t.runes[start]))
+		return 0, 0, fmt.Errorf("ReadNumber did not find an integer: %v", string(runes[0]))
 	}
 
 	i, err := strconv.ParseInt(number, 10, 64)
@@ -228,6 +213,7 @@ func (t *Template) readNumber(start int) (int, int, error) {
 	return int(i), len(number), nil
 }
 
-func (t *Template) isNumber(i int) bool {
-	return (t.runes[i] >= '0' && t.runes[i] <= '9')
+// IsDigit checks if a given rune is a valid looking digit and returns a boolean.
+func IsDigit(r rune) bool {
+	return (r >= '0' && r <= '9')
 }
