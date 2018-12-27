@@ -82,6 +82,7 @@ func Dicer(base string, expr []rune) (string, error) {
 // Expand a dicer template given a set of strings mapping to %1, %2, etc.
 // %n is a shortcut for %[n].
 // %[expressions] are expanded by the Dicer.
+// If no expression is given, append a ' %1' (or just '%1' if the template is empty).
 func Expand(template string, inputs []string) (string, error) {
 	runes := []rune(template)
 	var out string
@@ -90,6 +91,7 @@ func Expand(template string, inputs []string) (string, error) {
 		return "", fmt.Errorf("at least one input must be specified")
 	}
 
+	expansionFound := false
 	for pos := 0; pos < len(runes); pos++ {
 		char := runes[pos]
 
@@ -102,6 +104,7 @@ func Expand(template string, inputs []string) (string, error) {
 				out += "%"
 				continue
 			case peek == '[':
+				expansionFound = true
 				// Scan ahead to make sure the dicer expression has a closing ']'. We could catch this later
 				// parsing char-by-char, but it's a better user experience to see an easy error about a missing
 				// ']' instead of seeing that there's an invalid dicer expression (trying to parse chars that
@@ -137,6 +140,7 @@ func Expand(template string, inputs []string) (string, error) {
 				out += dicerOut
 				continue
 			case isDigit(runes[pos+1]):
+				expansionFound = true
 				index, indexLength, err := ReadNumber(runes[pos+1:])
 				if err != nil {
 					return "", err
@@ -154,6 +158,20 @@ func Expand(template string, inputs []string) (string, error) {
 		}
 
 		out += string(char)
+	}
+
+	// Default %1 if no expansions
+	if !expansionFound {
+		if len(template) > 0 {
+			out += " "
+		}
+
+		input, err := inputPick(&inputs, 1)
+		if err != nil {
+			return "", err
+		}
+
+		out += input
 	}
 
 	return out, nil

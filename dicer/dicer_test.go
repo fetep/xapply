@@ -35,6 +35,23 @@ func TestDicer(T *testing.T) {
 			output:   "hello world",
 		},
 
+		// Auto-append %1
+		DicerTest{
+			template: "",
+			inputs:   []string{"world"},
+			output:   "world",
+		},
+		DicerTest{
+			template: "hello",
+			inputs:   []string{"world"},
+			output:   "hello world",
+		},
+		DicerTest{
+			template: "%%hello",
+			inputs:   []string{"world"},
+			output:   "%hello world",
+		},
+
 		// Multi-character index
 		DicerTest{
 			template: "%10",
@@ -88,16 +105,16 @@ func TestDicer(T *testing.T) {
 
 		// EOL %
 		DicerTest{
-			template: "test%",
+			template: "test %1 %",
 			inputs:   []string{"a"},
-			output:   "test%",
+			output:   "test a %",
 		},
 
 		// % followed by a non-number
 		DicerTest{
-			template: "test%q",
+			template: "test %1 %q",
 			inputs:   []string{"a"},
-			output:   "test%q",
+			output:   "test a %q",
 		},
 
 		// dice selection
