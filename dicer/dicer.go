@@ -86,6 +86,10 @@ func Expand(template string, inputs []string) (string, error) {
 	runes := []rune(template)
 	var out string
 
+	if len(inputs) == 0 {
+		return "", fmt.Errorf("at least one input must be specified")
+	}
+
 	for pos := 0; pos < len(runes); pos++ {
 		char := runes[pos]
 
@@ -114,15 +118,17 @@ func Expand(template string, inputs []string) (string, error) {
 				}
 
 				dicerExpr := runes[pos+2 : end]
-				input, inputLength, err := ReadNumber(dicerExpr)
+				index, indexLength, err := ReadNumber(dicerExpr)
 				if err != nil {
 					return "", err
 				}
-				if input > len(inputs) {
-					return "", fmt.Errorf("template references out of bounds input index %d", input)
+
+				input, err := inputPick(&inputs, index)
+				if err != nil {
+					return "", err
 				}
 
-				dicerOut, err := Dicer(inputs[input-1], dicerExpr[inputLength:])
+				dicerOut, err := Dicer(input, dicerExpr[indexLength:])
 				if err != nil {
 					return "", err
 				}
@@ -131,16 +137,18 @@ func Expand(template string, inputs []string) (string, error) {
 				out += dicerOut
 				continue
 			case isDigit(runes[pos+1]):
-				input, inputLength, err := ReadNumber(runes[pos+1:])
+				index, indexLength, err := ReadNumber(runes[pos+1:])
 				if err != nil {
 					return "", err
 				}
-				if input > len(inputs) {
-					return "", fmt.Errorf("template references out of bounds input index %d", input)
+
+				input, err := inputPick(&inputs, index)
+				if err != nil {
+					return "", err
 				}
 
-				pos += inputLength
-				out += inputs[input-1]
+				pos += indexLength
+				out += input
 				continue
 			}
 		}
@@ -216,4 +224,15 @@ func ReadNumber(runes []rune) (int, int, error) {
 // isDigit checks if a given rune is a valid looking digit and returns a boolean.
 func isDigit(r rune) bool {
 	return (r >= '0' && r <= '9')
+}
+
+// Pick an input given a dicer index (1-based). Returns the input or an error.
+func inputPick(inputs *[]string, index int) (string, error) {
+	if index <= 0 {
+		return "", fmt.Errorf("index %d: dicer index must be >0", index)
+	} else if index > len(*inputs) {
+		return "", fmt.Errorf("index %d: out of bounds (inputs size %d)", index, len(*inputs))
+	}
+
+	return (*inputs)[index-1], nil
 }

@@ -52,11 +52,18 @@ func TestDicer(T *testing.T) {
 			output:   "10test",
 		},
 
+		// Must be one input
+		DicerTest{
+			template: "",
+			inputs:   []string{},
+			err:      "at least one input must be specified",
+		},
+
 		// Out of bound index
 		DicerTest{
 			template: "hello %2",
 			inputs:   []string{"a"},
-			err:      "template references out of bounds input index 2",
+			err:      "index 2: out of bounds (inputs size 1)",
 		},
 
 		// Missing ]
@@ -68,7 +75,7 @@ func TestDicer(T *testing.T) {
 
 		DicerTest{
 			template: "hello %[",
-			inputs:   []string{},
+			inputs:   []string{"a"},
 			err:      "char 7: dicer expression missing closing ]",
 		},
 
@@ -82,14 +89,14 @@ func TestDicer(T *testing.T) {
 		// EOL %
 		DicerTest{
 			template: "test%",
-			inputs:   []string{},
+			inputs:   []string{"a"},
 			output:   "test%",
 		},
 
 		// % followed by a non-number
 		DicerTest{
 			template: "test%q",
-			inputs:   []string{},
+			inputs:   []string{"a"},
 			output:   "test%q",
 		},
 
