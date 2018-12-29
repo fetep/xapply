@@ -76,9 +76,7 @@ type jobData struct {
 func worker(jobs <-chan jobData) {
 	defer workers.Done()
 
-	for {
-		job := <-jobs
-
+	for job := range jobs {
 		if job.finished {
 			break
 		}
