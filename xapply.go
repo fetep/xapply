@@ -13,6 +13,7 @@ import (
 )
 
 var (
+	flgFile     = flag.BoolP("file", "f", false, "treat arguments as filenames to read inputs from")
 	flgShell    = flag.StringP("shell", "S", os.Getenv("SHELL"), "shell to run commands with")
 	flgNoop     = flag.BoolP("noop", "n", false, "print what would be run to stdout instead of running it")
 	flgParallel = flag.IntP("parallel", "P", 1, "the number of processes to run in parallel")
@@ -108,8 +109,22 @@ func main() {
 
 	// Generate jobs
 	for _, input := range args {
-		if input == "-" {
-			scanner := bufio.NewScanner(os.Stdin)
+
+		if *flgFile {
+			var file *os.File
+
+			if input == "-" {
+				file = os.Stdin
+			} else {
+				var err error
+				file, err = os.Open(input)
+				if err != nil {
+					log.Printf("%s: error opening: %s", input, err)
+					continue
+				}
+			}
+
+			scanner := bufio.NewScanner(file)
 			for scanner.Scan() {
 				jobs <- jobData{cmdTmpl, scanner.Text(), false}
 			}

@@ -61,6 +61,18 @@ else
   echo "FAIL: xapply -P not executing in parallel (expected 2s sleep, got ${duration}s sleep)"
 fi
 
+### xapply -f
+echo {1..5} | xargs -n1 >1
+echo {1..5} | xargs -n1 >2
+echo {1..5} | xargs -n1 | $xapply -f 'echo %1' 1 2 - >out
+lines=$(wc -l <out)
+if [[ $lines == "15" ]]; then
+  pass=$((pass+1))
+else
+  echo "FAIL: xapply -f file input mode (expected 15 lines, got $lines)"
+  fail=$((fail+1))
+fi
+
 echo "Test Summary: Pass=$pass Fail=$fail"
 if [[ $fail > 0 ]]; then
   exit 1
